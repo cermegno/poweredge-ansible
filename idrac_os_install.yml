@@ -1,0 +1,75 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  name: Booting to Network Operating System image
+
+  collections:
+    - dellemc.openmanage
+
+  vars:
+    idracIp: "10.1.1.10"
+    userserver: "root"
+    paswserver: "calvin"
+    share_name: "192.168.10.10:/NAS_NFS"
+    iso_image: "vmware/esx01.iso"
+
+  tasks:
+    - name: Check LC Ready Status
+      idrac_lifecycle_controller_status_info:
+        idrac_ip:   "{{ idracIp }}"
+        idrac_user: "{{ userserver }}"
+        idrac_password:  "{{ paswserver }}"
+      register: lcresult
+    - name:
+      debug:
+        msg: "{{ lcresult.lc_status_info.LCReady }}"
+
+    - name: Reset iDRAC if LCM NOT READY
+      idrac_reset:
+         idrac_ip:   "{{ idracIp }}"
+         idrac_user: "{{ userserver }}"
+         idrac_password:  "{{ paswserver }}"
+      # register: result
+      # failed_when: result is changed
+      when: lcresult.lc_status_info.LCReady == false
+
+    - name: Reset iDRAC if LCM NOT READY
+      idrac_reset:
+         idrac_ip:   "{{ idracIp }}"
+         idrac_user: "{{ userserver }}"
+         idrac_password:  "{{ paswserver }}"
+      # register: result
+      # failed_when: result is changed
+      when: lcresult.lc_status_info.LCReady == false
+
+    - name: Wait for port 443 to become open on the host
+      wait_for:
+         host: "{{ idracIp }}"
+         port: 443
+         delay: 30
+         connect_timeout: 5
+         timeout: 500
+      register: result
+      failed_when: result.elapsed < 20
+      when: lcresult.lc_status_info.LCReady == false
+
+    - name: Check LC Ready Status again
+      idrac_lifecycle_controller_status_info:
+        idrac_ip:   "{{ idracIp }}"
+        idrac_user: "{{ userserver }}"
+        idrac_password:  "{{ paswserver }}"
+      register: result
+      until: result.lc_status_info.LCReady == true
+      retries: 30
+      delay: 10
+
+    - name: "Boot to OS installer"
+      idrac_os_deployment:
+        idrac_ip: "{{ idracIp }}"
+        idrac_password: "{{ paswserver }}"
+        idrac_user: "{{ userserver }}"
+        share_name: "{{ share_name }}"
+        iso_image: "{{ iso_image }}"
+        expose_duration: 180
+
